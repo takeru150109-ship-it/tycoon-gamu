@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タイクーンゲーム</title>
+
+<style>
+body{
+  margin:0;
+  background:#12121a;
+  color:white;
+  text-align:center;
+  font-family:sans-serif;
+}
+
+/* タイトル */
+#titleScreen{
+  position:fixed;
+  width:100%;
+  height:100%;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  background:linear-gradient(#1e1e2f,#12121a);
+}
+
+/* ゲーム */
+#gameScreen{display:none;}
+
+#clickBtn{
+  width:150px;
+  height:150px;
+  border-radius:50%;
+  font-size:25px;
+  margin:20px;
+}
+
+/* カード */
+#cardContainer{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  padding:10px;
+}
+
+.card{
+  background:#2a2a40;
+  padding:10px;
+  border-radius:10px;
+}
+
+/* メニュー */
+#menu{
+  position:fixed;
+  bottom:0;
+  width:100%;
+  display:flex;
+  background:#2a2a40;
+}
+#menu div{flex:1;}
+#menu button{width:100%;padding:10px;}
+
+/* ガチャ演出 */
+#gachaAnimation{
+  position:fixed;
+  width:100%;
+  height:100%;
+  background:black;
+  display:none;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  z-index:999;
+}
+
+#capsule{
+  width:120px;
+  height:120px;
+  border-radius:50%;
+  background:white;
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+  0%{transform:rotate(0);}
+  100%{transform:rotate(360deg);}
+}
+
+#result{
+  font-size:30px;
+  margin-top:20px;
+}
+
+/* 管理者 */
+#adminPanel{
+  position:fixed;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.9);
+  display:none;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+}
+</style>
+</head>
+
+<body ontouchstart="">
+
+<div id="titleScreen">
+  <h1>タイクーンゲーム</h1>
+  <button onclick="startGame()">START</button>
+</div>
+
+<div id="gameScreen">
+<div>
+コイン:<span id="coins">0</span> |
+RP:<span id="rp">0</span> |
+<span id="eventText">イベントなし</span>
+</div>
+
+<button id="clickBtn" onclick="clickCoin()">TAP</button>
+
+<div id="cardContainer"></div>
+
+<div id="menu">
+<div>
+<button id="gachaBtn" onclick="gacha()">ガチャ</button>
+<div id="gachaCost"></div>
+</div>
+
+<div>
+<button id="gacha10Btn" onclick="gacha10()">10連</button>
+<div id="gacha10Cost"></div>
+</div>
+
+<div>
+<button id="gacha100Btn" onclick="gacha100()">100連</button>
+<div id="gacha100Cost"></div>
+</div>
+
+<button onclick="rebirth()">リバース</button>
+<button onclick="openCollection()">図鑑</button>
+<button onclick="openRPShop()">RP</button>
+<button onclick="openAdmin()">管理者</button>
+</div>
+</div>
+
+<!-- ガチャ演出 -->
+<div id="gachaAnimation">
+<div id="capsule"></div>
+<div id="result"></div>
+</div>
+
+<!-- 管理者 -->
+<div id="adminPanel">
+<h2>管理者コード</h2>
+<input id="adminInput">
+<button onclick="checkAdmin()">OK</button>
+<button onclick="closeAdmin()">閉じる</button>
+</div>
+
+<script>
+// データ
+let game={
+ coins:0,
+ characters:{},
+ collection:{},
+ rebirthPoints:0
+};
+
+let rpUpgrades={click:0};
+
+// キャラ
+const charList=[
+ {name:"スライム",multi:1},
+ {name:"ゴブリン",multi:1.2},
+ {name:"ナイト",multi:2},
+ {name:"ドラゴン",multi:5}
+];
+
+// イベント
+let eventData={active:null,multi:1,end:0};
+const events=[
+ {name:"マグマ",multi:3},
+ {name:"クリスタル",multi:4},
+ {name:"レインボー",multi:5},
+ {name:"ブラッドムーン",multi:6.5}
+];
+
+// スタート
+function startGame(){
+ document.getElementById("titleScreen").style.display="none";
+ document.getElementById("gameScreen").style.display="block";
+ update();
+}
+
+// クリック
+function clickCoin(){
+ game.coins+=getMulti();
+ update();
+}
+
+// 倍率
+function getMulti(){
+ let m=1;
+ for(let c in game.characters){
+  m+=charList.find(x=>x.name===c).multi*game.characters[c];
+ }
+ m*=eventData.multi*(1+rpUpgrades.click);
+ return m;
+}
+
+// ガチャ演出
+function playGacha(char){
+ let box=document.getElementById("gachaAnimation");
+ let cap=document.getElementById("capsule");
+ let res=document.getElementById("result");
+
+ box.style.display="flex";
+ res.textContent="";
+ cap.style.background="white";
+
+ setTimeout(()=>{
+  res.textContent=char;
+ },1500);
+
+ setTimeout(()=>{
+  box.style.display="none";
+ },2500);
+}
+
+// ガチャ
+function gacha(){
+ if(game.coins<100)return;
+ game.coins-=100;
+ let char=randomChar();
+ playGacha(char);
+ setTimeout(()=>addChar(char),2500);
+}
+
+// 10連
+function gacha10(){
+ if(game.coins<1000)return;
+ game.coins-=1000;
+ let i=0;
+ function roll(){
+  if(i>=10)return;
+  let char=(eventData.active&&i===9)?"イベントドラゴン":randomChar();
+  playGacha(char);
+  setTimeout(()=>{
+   addChar(char);
+   i++;
+   roll();
+  },2500);
+ }
+ roll();
+}
+
+// 100連
+function gacha100(){
+ if(game.coins<10000)return;
+ game.coins-=10000;
+ for(let i=0;i<100;i++){
+  setTimeout(()=>addChar(randomChar()),i*20);
+ }
+}
+
+// キャラ追加
+function addChar(name){
+ if(!game.characters[name])game.characters[name]=0;
+ game.characters[name]++;
+ game.collection[name]=true;
+ update();
+}
+
+// イベント自動
+setInterval(()=>{
+ if(!eventData.active && Math.random()<0.3){
+  let e=events[Math.floor(Math.random()*events.length)];
+  eventData.active=e.name;
+  eventData.multi=e.multi;
+  eventData.end=Date.now()+30000;
+ }
+},20000);
+
+// イベント終了
+setInterval(()=>{
+ if(eventData.active && Date.now()>eventData.end){
+  eventData.active=null;
+  eventData.multi=1;
+ }
+},1000);
+
+// 図鑑
+function openCollection(){
+ let txt="図鑑\n";
+ charList.forEach(c=>{
+  if(game.collection[c.name])txt+=c.name+"\n";
+ });
+ alert(txt);
+}
+
+// RPショップ
+function openRPShop(){
+ let c=prompt("1:クリック強化(1RP)");
+ if(c==="1"&&game.rebirthPoints>0){
+  game.rebirthPoints--;
+  rpUpgrades.click+=0.5;
+ }
+}
+
+// 管理者
+function openAdmin(){adminPanel.style.display="flex";}
+function closeAdmin(){adminPanel.style.display="none";}
+function checkAdmin(){
+ if(adminInput.value==="T26438"){
+  game.coins+=100000;
+  game.rebirthPoints+=10;
+  alert("ON");
+ }
+}
+
+// 更新
+function update(){
+ coins.textContent=Math.floor(game.coins);
+ rp.textContent=game.rebirthPoints;
+
+ gachaCost.textContent="100";
+ gacha10Cost.textContent="1000";
+ gacha100Cost.textContent="10000";
+
+ eventText.textContent=eventData.active?eventData.active:"なし";
+
+ let box=document.getElementById("cardContainer");
+ box.innerHTML="";
+ for(let c in game.characters){
+  let d=document.createElement("div");
+  d.className="card";
+  d.innerHTML=c+" x"+game.characters[c];
+  box.appendChild(d);
+ }
+}
+
+// ランダム
+function randomChar(){
+ return charList[Math.floor(Math.random()*charList.length)].name;
+}
+
+</script>
+</body>
+</html>
